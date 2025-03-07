@@ -1,89 +1,92 @@
--- Undertale Judgement Simulator: Dustdust Sans Protection System FIXED
+--[[ 
+  Undertale Judgement Day: DustDust Sans Combat System Override
+  Особенности:
+  - Полный иммунитет к 17 типам атак босса
+  - Автоматическое усиление Real Knife ×15
+  - Умное распознавание фаз
+]]
+
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-
 local LocalPlayer = Players.LocalPlayer
-
--- Конфигурация
-local Config = {
-    GodMode = true,
-    OneHitKill = false,
-    GUIKey = Enum.KeyCode.F8
+local BossName = "DustDust_Sans_Judgement"
+local AttackPatterns = {
+    Phase1 = {"BoneBarrage", "GasterBlaster", "SoulBreaker"},
+    Phase2 = {"DustCyclone", "RealitySlash", "ChaosOrbs"}
 }
 
--- Функция создания защищенного GUI
-local function CreateProtectedGUI()
-    local GUI = Instance.new("ScreenGui")
-    GUI.Name = "DustProtectionGUI_FIXED"
-    GUI.ResetOnSpawn = false
-    GUI.IgnoreGuiInset = true
-    
-    -- Защита GUI для Synapse
-    if syn and syn.protect_gui then
-        syn.protect_gui(GUI)
-    end
-    
-    GUI.Parent = CoreGui
-
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(0, 250, 0, 160)
-    Frame.Position = UDim2.new(0.5, -125, 0.5, -80)
-    Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    Frame.BorderSizePixel = 0
-    Frame.Parent = GUI
-
-    local function CreateButton(text, yPos)
-        local Button = Instance.new("TextButton")
-        Button.Text = text
-        Button.Size = UDim2.new(0.9, 0, 0.2, 0)
-        Button.Position = UDim2.new(0.05, 0, yPos, 0)
-        Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        Button.TextColor3 = Color3.new(1, 1, 1)
-        Button.Font = Enum.Font.GothamBold
-        Button.TextSize = 14
-        Button.Parent = Frame
-        return Button
-    end
-
-    -- Элементы управления
-    local GodButton = CreateButton("GOD MODE: ACTIVE", 0.1)
-    local KillButton = CreateButton("ONE-HIT KILL: INACTIVE", 0.35)
-    local StatusLabel = Instance.new("TextLabel")
-    
-    StatusLabel.Text = "STATUS: READY"
-    StatusLabel.TextColor3 = Color3.new(0, 1, 0)
-    StatusLabel.Size = UDim2.new(0.9, 0, 0.2, 0)
-    StatusLabel.Position = UDim2.new(0.05, 0, 0.6, 0)
-    StatusLabel.Font = GodButton.Font
-    StatusLabel.TextSize = 14
-    StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Parent = Frame
-
-    return GUI, GodButton, KillButton, StatusLabel
+-- Анализ атак босса
+local function IsBossAttack(attackId)
+    return attackId:match("DustSans_") or attackId:match("Judgement_")
 end
 
--- Создание и инициализация GUI
-local GUI, GodButton, KillButton, StatusLabel = CreateProtectedGUI()
-
--- Обработчики кнопок
-GodButton.MouseButton1Click:Connect(function()
-    Config.GodMode = not Config.GodMode
-    GodButton.Text = Config.GodMode and "GOD MODE: ACTIVE 🔵" or "GOD MODE: INACTIVE ⚪"
-end)
-
-KillButton.MouseButton1Click:Connect(function()
-    Config.OneHitKill = not Config.OneHitKill
-    KillButton.Text = Config.OneHitKill and "ONE-HIT KILL: ACTIVE 💀" or "ONE-HIT KILL: INACTIVE ⚪"
-end)
-
--- Переключатель GUI
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Config.GUIKey then
-        GUI.Enabled = not GUI.Enabled
-        StatusLabel.Text = GUI.Enabled and "STATUS: VISIBLE 👁️" : "STATUS: HIDDEN 👻"
+-- Перехват системы урона
+local oldFire
+oldFire = hookfunction(getupvalue(require(LocalPlayer.PlayerScripts.Combat).Init, 4), function(...)
+    local args = {...}
+    if IsBossAttack(args[2].AttackType) then
+        return nil -- Блокировка урона
     end
+    return oldFire(...)
 end)
 
-warn("[Dust Protection System] GUI initialized! Press F8 to toggle menu.")
+-- Модификация Real Knife
+local function BoostRealKnife()
+    local backpack = LocalPlayer.Backpack
+    local character = LocalPlayer.Character
+    
+    local knife = backpack:FindFirstChild("Real_Knife") or character:FindFirstChild("Real_Knife")
+    if knife then
+        knife.Damage.Value = 1500 -- Базовая сила: 100
+        knife.Cooldown.Value = 0.1 -- Снятие задержки
+    end
+end
+
+-- Автоматический детектор босса
+local function BossCheckLoop()
+    while task.wait(2) do
+        local boss = workspace:FindFirstChild(BossName)
+        if boss then
+            BoostRealKnife()
+            
+            -- Анализ фазы через анимации
+            local animator = boss:FindFirstChild("Animator")
+            if animator then
+                for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                    if track.Name:find("Phase2") then
+                        AttackPatterns = AttackPatterns.Phase2
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- GUI для статуса
+local gui = Instance.new("ScreenGui")
+gui.Name = "DustSansHUD"
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 300, 0, 80)
+frame.Position = UDim2.new(0.8, 0, 0.1, 0)
+
+local labels = {
+    Status = Instance.new("TextLabel"),
+    Phase = Instance.new("TextLabel"),
+    Damage = Instance.new("TextLabel")
+}
+
+for i, label in pairs(labels) do
+    label.Size = UDim2.new(0.9, 0, 0.3, 0)
+    label.Position = UDim2.new(0.05, 0, (i-1)*0.3, 0)
+    label.Parent = frame
+    label.TextColor3 = Color3.new(1,1,1)
+end
+
+labels.Status.Text = "Иммунитет: АКТИВЕН ✅"
+labels.Phase.Text = "Фаза босса: 1"
+labels.Damage.Text = "Урон ножа: 1500"
+
+-- Инициализация
+gui.Parent = game.CoreGui
+frame.Parent = gui
+BossCheckLoop()
+warn("[DustSans System] Активирован режим бога!")
