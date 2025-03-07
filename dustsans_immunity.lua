@@ -1,92 +1,95 @@
---[[ 
-  Undertale Judgement Day: DustDust Sans Combat System Override
-  Особенности:
-  - Полный иммунитет к 17 типам атак босса
-  - Автоматическое усиление Real Knife ×15
-  - Умное распознавание фаз
-]]
-
+-- Undertale Judgement Day: DustDust Sans Immunity System
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+
 local LocalPlayer = Players.LocalPlayer
 local BossName = "DustDust_Sans_Judgement"
-local AttackPatterns = {
-    Phase1 = {"BoneBarrage", "GasterBlaster", "SoulBreaker"},
-    Phase2 = {"DustCyclone", "RealitySlash", "ChaosOrbs"}
+local RealKnifeName = "Real_Knife"
+
+-- Конфигурация
+local Config = {
+    GodMode = true,
+    DamageMultiplier = 15,
+    KnifeCooldown = 0.1
 }
 
--- Анализ атак босса
-local function IsBossAttack(attackId)
-    return attackId:match("DustSans_") or attackId:match("Judgement_")
-end
-
 -- Перехват системы урона
-local oldFire
-oldFire = hookfunction(getupvalue(require(LocalPlayer.PlayerScripts.Combat).Init, 4), function(...)
-    local args = {...}
-    if IsBossAttack(args[2].AttackType) then
-        return nil -- Блокировка урона
+local function BlockBossDamage()
+    local CombatModule
+    for _, script in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
+        if script.Name == "Combat" then
+            CombatModule = require(script)
+            break
+        end
     end
-    return oldFire(...)
-end)
 
--- Модификация Real Knife
-local function BoostRealKnife()
-    local backpack = LocalPlayer.Backpack
-    local character = LocalPlayer.Character
-    
-    local knife = backpack:FindFirstChild("Real_Knife") or character:FindFirstChild("Real_Knife")
-    if knife then
-        knife.Damage.Value = 1500 -- Базовая сила: 100
-        knife.Cooldown.Value = 0.1 -- Снятие задержки
-    end
-end
-
--- Автоматический детектор босса
-local function BossCheckLoop()
-    while task.wait(2) do
-        local boss = workspace:FindFirstChild(BossName)
-        if boss then
-            BoostRealKnife()
-            
-            -- Анализ фазы через анимации
-            local animator = boss:FindFirstChild("Animator")
-            if animator then
-                for _, track in pairs(animator:GetPlayingAnimationTracks()) do
-                    if track.Name:find("Phase2") then
-                        AttackPatterns = AttackPatterns.Phase2
-                    end
-                end
+    if CombatModule then
+        local originalTakeDamage = CombatModule.TakeDamage
+        CombatModule.TakeDamage = function(...)
+            local args = {...}
+            if Config.GodMode and args[2] and args[2].AttackerName == BossName then
+                return nil
             end
+            return originalTakeDamage(...)
         end
     end
 end
 
--- GUI для статуса
-local gui = Instance.new("ScreenGui")
-gui.Name = "DustSansHUD"
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 80)
-frame.Position = UDim2.new(0.8, 0, 0.1, 0)
+-- Усиление Real Knife
+local function ModifyWeaponStats()
+    local function UpdateKnife(knife)
+        if knife:IsA("Tool") and knife.Name == RealKnifeName then
+            knife.Damage.Value = 100 * Config.DamageMultiplier
+            knife.Cooldown.Value = Config.KnifeCooldown
+        end
+    end
 
-local labels = {
-    Status = Instance.new("TextLabel"),
-    Phase = Instance.new("TextLabel"),
-    Damage = Instance.new("TextLabel")
-}
-
-for i, label in pairs(labels) do
-    label.Size = UDim2.new(0.9, 0, 0.3, 0)
-    label.Position = UDim2.new(0.05, 0, (i-1)*0.3, 0)
-    label.Parent = frame
-    label.TextColor3 = Color3.new(1,1,1)
+    LocalPlayer.Backpack.ChildAdded:Connect(UpdateKnife)
+    LocalPlayer.Character.ChildAdded:Connect(UpdateKnife)
+    
+    for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+        UpdateKnife(tool)
+    end
 end
 
-labels.Status.Text = "Иммунитет: АКТИВЕН ✅"
-labels.Phase.Text = "Фаза босса: 1"
-labels.Damage.Text = "Урон ножа: 1500"
+-- GUI интерфейс
+local function CreateHUD()
+    local GUI = Instance.new("ScreenGui")
+    GUI.Name = "DustSansHUD"
+    GUI.Parent = CoreGui
+
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, 250, 0, 100)
+    Frame.Position = UDim2.new(0.8, 0, 0.1, 0)
+    Frame.BackgroundTransparency = 0.7
+    Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Text = "⚔️ ИММУНИТЕТ: АКТИВЕН"
+    StatusLabel.TextColor3 = Color3.new(0, 1, 0)
+    StatusLabel.Size = UDim2.new(0.9, 0, 0.3, 0)
+    StatusLabel.Position = UDim2.new(0.05, 0, 0.1, 0)
+
+    local DamageLabel = Instance.new("TextLabel")
+    DamageLabel.Text = string.format("УРОН НОЖА: x%d", Config.DamageMultiplier)
+    DamageLabel.TextColor3 = Color3.new(1, 0.5, 0)
+    DamageLabel.Size = UDim2.new(0.9, 0, 0.3, 0)
+    DamageLabel.Position = UDim2.new(0.05, 0, 0.5, 0)
+
+    StatusLabel.Parent = Frame
+    DamageLabel.Parent = Frame
+    Frame.Parent = GUI
+
+    return GUI
+end
 
 -- Инициализация
-gui.Parent = game.CoreGui
-frame.Parent = gui
-BossCheckLoop()
-warn("[DustSans System] Активирован режим бога!")
+BlockBossDamage()
+ModifyWeaponStats()
+CreateHUD()
+
+warn("[DustSans System] Система активирована!")
+print("▄▀▄▀▄▀▄ НАСТРОЙКИ ▄▀▄▀▄▀▄")
+print("Иммунитет: Включен")
+print("Множитель урона: x"..Config.DamageMultiplier)
